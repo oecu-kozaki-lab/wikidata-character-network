@@ -1,0 +1,226 @@
+<!DOCTYPE html>
+<html lang="ja">
+
+<head>
+    <meta charset="UTF-8">
+    <title>システムの処理フロー図</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            background: #fff;
+            display: flex;
+            justify-content: center;
+            padding: 30px;
+            font-family: 'Yu Gothic', 'Meiryo', sans-serif;
+        }
+
+        .diagram {
+            width: 680px;
+        }
+
+        .title {
+            text-align: center;
+            font-size: 18px;
+            font-weight: bold;
+            margin-bottom: 20px;
+            color: #000;
+        }
+
+        .phase {
+            border: 2px solid #333;
+            border-radius: 8px;
+            margin-bottom: 16px;
+            position: relative;
+            overflow: visible;
+        }
+
+        .phase-label {
+            position: absolute;
+            top: -13px;
+            left: 16px;
+            background: #fff;
+            padding: 0 8px;
+            font-weight: bold;
+            font-size: 14px;
+            color: #333;
+        }
+
+        .phase-content {
+            padding: 28px 24px 20px;
+        }
+
+        .phase-search {
+            border-color: #1a73e8;
+            background: #e8f0fe;
+        }
+
+        .phase-search .phase-label {
+            color: #1a73e8;
+        }
+
+        .phase-extract {
+            border-color: #0d7e3f;
+            background: #e6f4ea;
+        }
+
+        .phase-extract .phase-label {
+            color: #0d7e3f;
+        }
+
+        .phase-visual {
+            border-color: #e37400;
+            background: #fef7e0;
+        }
+
+        .phase-visual .phase-label {
+            color: #e37400;
+        }
+
+        .step {
+            background: #fff;
+            border: 1.5px solid #555;
+            border-radius: 6px;
+            padding: 10px 16px;
+            text-align: center;
+            font-size: 13px;
+            color: #222;
+            line-height: 1.5;
+            margin: 0 auto;
+            max-width: 480px;
+        }
+
+        .step-api {
+            background: #f0f0f0;
+            border-radius: 20px;
+            border: 1.5px solid #555;
+        }
+
+        .arrow {
+            text-align: center;
+            font-size: 20px;
+            color: #555;
+            padding: 4px 0;
+            line-height: 1;
+        }
+
+        .arrow::after {
+            content: '▼';
+            display: block;
+        }
+
+        .side-note {
+            position: absolute;
+            right: -10px;
+            top: 50%;
+            transform: translateX(100%) translateY(-50%);
+            background: #fff;
+            border: 1.5px dashed #888;
+            border-radius: 6px;
+            padding: 6px 12px;
+            font-size: 12px;
+            color: #555;
+            white-space: nowrap;
+        }
+
+        .step-group {
+            position: relative;
+        }
+
+        .output-row {
+            display: flex;
+            gap: 10px;
+            justify-content: center;
+            max-width: 520px;
+            margin: 0 auto;
+        }
+
+        .output-row .step {
+            flex: 1;
+            font-size: 12px;
+            padding: 8px 10px;
+        }
+
+        .phase-arrow {
+            text-align: center;
+            font-size: 18px;
+            color: #555;
+            padding: 4px 0;
+            line-height: 1;
+        }
+
+        .phase-arrow::after {
+            content: '▼';
+            display: block;
+        }
+
+        .caption {
+            text-align: center;
+            font-size: 13px;
+            margin-top: 12px;
+            color: #333;
+        }
+    </style>
+</head>
+
+<body>
+    <div class="diagram">
+
+        <!-- Phase 1: 検索 -->
+        <div class="phase phase-search">
+            <div class="phase-label">検索フェーズ</div>
+            <div class="phase-content">
+                <div class="step">利用者入力：作品名（2文字以上）</div>
+                <div class="arrow"></div>
+                <div class="step">SPARQLクエリ自動生成<br><small>（部分一致検索・大文字小文字無視）</small></div>
+                <div class="arrow"></div>
+                <div class="step step-api">Wikidata SPARQL API<br><small>query.wikidata.org</small></div>
+                <div class="arrow"></div>
+                <div class="step">候補作品のフィルタリング<br><small>（登場人物5人以上 / GROUP BY + HAVING）</small></div>
+                <div class="arrow"></div>
+                <div class="step">候補リスト表示<br><small>（作品名・作品タイプ・登場人物数）</small></div>
+            </div>
+        </div>
+
+        <div class="phase-arrow"></div>
+
+        <!-- Phase 2: 抽出 -->
+        <div class="phase phase-extract">
+            <div class="phase-label">抽出フェーズ（2段階処理）</div>
+            <div class="phase-content">
+                <div class="step">第1段階：登場人物の抽出<br><small>プロパティ P674（登場人物）で全人物を取得</small></div>
+                <div class="arrow"></div>
+                <div class="step-group">
+                    <div class="step">第2段階：関係性の探索<br><small>4カテゴリ・18種類の関係プロパティで人物間の接続を探索</small></div>
+                    <div class="side-note">検索深度<br>1次〜3次関係</div>
+                </div>
+            </div>
+        </div>
+
+        <div class="phase-arrow"></div>
+
+        <!-- Phase 3: 可視化 -->
+        <div class="phase phase-visual">
+            <div class="phase-label">可視化フェーズ</div>
+            <div class="phase-content">
+                <div class="step">エッジ統合処理<br><small>双方向関係（配偶者・兄弟姉妹・親族）の重複を1本に統合</small></div>
+                <div class="arrow"></div>
+                <div class="step">ネットワーク図の描画<br><small>Cytoscape.js / COSE レイアウトアルゴリズム</small></div>
+                <div class="arrow"></div>
+                <div class="output-row">
+                    <div class="step">統計サマリ<br><small>人物数・関係数</small></div>
+                    <div class="step">関係一覧<br><small>テーブル表示</small></div>
+                    <div class="step">CSVエクスポート<br><small>データ出力</small></div>
+                </div>
+            </div>
+        </div>
+
+        <div class="caption">図X　システムの処理フロー</div>
+    </div>
+</body>
+
+</html>

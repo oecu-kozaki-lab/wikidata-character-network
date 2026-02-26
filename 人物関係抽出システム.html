@@ -1,0 +1,1832 @@
+﻿<!DOCTYPE html>
+<html lang="ja">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Wikidata作品の人物関係抽出</title>
+    <script src="https://unpkg.com/cytoscape/dist/cytoscape.min.js"></script>
+    <style>
+        /* Google-like Reset & Base Styles */
+        body {
+            font-family: arial, sans-serif;
+            background: #fff;
+            margin: 0;
+            color: #202124;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            min-height: 100vh;
+        }
+
+        /* Header / Logo Area */
+        .header-area {
+            display: flex;
+            flex-direction: column;
+            justify-content: center;
+            align-items: center;
+            margin-top: 60px;
+            margin-bottom: 20px;
+            width: 100%;
+            max-width: 1200px;
+            padding: 0 20px;
+            position: relative;
+        }
+
+        .title {
+            font-size: 2.5rem;
+            font-weight: 500;
+            letter-spacing: -1px;
+            margin: 0;
+            text-align: center;
+            line-height: 1.2;
+        }
+
+        .query-editor-btn {
+            background-color: #1a73e8;
+            border: 1px solid #1a73e8;
+            border-radius: 4px;
+            color: #fff;
+            font-family: arial, sans-serif;
+            font-size: 14px;
+            padding: 0 16px;
+            line-height: 27px;
+            height: 36px;
+            cursor: pointer;
+            user-select: none;
+            white-space: nowrap;
+            position: absolute;
+            right: 20px;
+            top: 0;
+        }
+
+        .query-editor-btn:hover {
+            background-color: #1765cc;
+            border-color: #1765cc;
+        }
+
+        /* Query Editor Panel */
+        .query-editor-panel {
+            position: fixed;
+            top: 0;
+            right: -500px;
+            width: 500px;
+            height: 100vh;
+            background: #fff;
+            box-shadow: -2px 0 8px rgba(0, 0, 0, 0.1);
+            transition: right 0.3s ease;
+            z-index: 1000;
+            overflow-y: auto;
+            padding: 24px;
+            box-sizing: border-box;
+        }
+
+        .query-editor-panel.open {
+            right: 0;
+        }
+
+        .query-editor-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 20px;
+            padding-bottom: 12px;
+            border-bottom: 1px solid #dadce0;
+        }
+
+        .query-editor-header h2 {
+            margin: 0;
+            font-size: 20px;
+            color: #202124;
+        }
+
+        .close-btn {
+            background: none;
+            border: none;
+            font-size: 24px;
+            color: #5f6368;
+            cursor: pointer;
+            padding: 0;
+            width: 32px;
+            height: 32px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            border-radius: 50%;
+        }
+
+        .close-btn:hover {
+            background: #f1f3f4;
+        }
+
+        .query-section {
+            margin-bottom: 20px;
+        }
+
+        .query-section label {
+            display: block;
+            font-weight: 600;
+            margin-bottom: 8px;
+            color: #202124;
+            font-size: 14px;
+        }
+
+
+
+        .config-grid {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 12px;
+        }
+
+        .config-item {
+            display: flex;
+            flex-direction: column;
+        }
+
+        .config-item label {
+            font-size: 13px;
+            margin-bottom: 4px;
+            font-weight: 500;
+        }
+
+        .config-item input,
+        .config-item select {
+            padding: 8px;
+            border: 1px solid #dadce0;
+            border-radius: 4px;
+            font-size: 14px;
+        }
+
+        .query-buttons {
+            display: flex;
+            gap: 8px;
+            margin-top: 12px;
+        }
+
+        .query-btn {
+            flex: 1;
+            padding: 8px 16px;
+            border: 1px solid #dadce0;
+            border-radius: 4px;
+            background: #fff;
+            color: #3c4043;
+            cursor: pointer;
+            font-size: 13px;
+        }
+
+        .query-btn:hover {
+            background: #f1f3f4;
+        }
+
+        .query-btn.primary {
+            background: #1a73e8;
+            color: #fff;
+            border-color: #1a73e8;
+        }
+
+        .query-btn.primary:hover {
+            background: #1765cc;
+        }
+
+
+
+        /* Google Logo Colors */
+        .logo-blue {
+            color: #4285f4;
+        }
+
+        .logo-red {
+            color: #ea4335;
+        }
+
+        .logo-yellow {
+            color: #fbbc05;
+        }
+
+        .logo-green {
+            color: #34a853;
+        }
+
+        /* Search Area */
+        .search-box-wrap {
+            width: 100%;
+            max-width: 584px;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            padding: 0 20px;
+            box-sizing: border-box;
+        }
+
+        .search-box-inner {
+            width: 100%;
+            position: relative;
+            display: flex;
+            align-items: center;
+        }
+
+        /* Search Input */
+        #searchInput {
+            width: 100%;
+            height: 44px;
+            border-radius: 24px;
+            border: 1px solid #dfe1e5;
+            padding: 0 45px 0 45px;
+            font-size: 16px;
+            outline: none;
+            color: #202124;
+            transition: box-shadow 0.2s, background-color 0.2s;
+        }
+
+        #searchInput:hover,
+        #searchInput:focus {
+            box-shadow: 0 1px 6px rgba(32, 33, 36, .28);
+            border-color: rgba(223, 225, 229, 0);
+        }
+
+        /* Search Icon */
+        .search-box-inner::before {
+            content: '';
+            position: absolute;
+            left: 14px;
+            width: 20px;
+            height: 20px;
+            background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' focusable='false' viewBox='0 0 24 24'%3E%3Cpath fill='%239aa0a6' d='M15.5 14h-.79l-.28-.27A6.471 6.471 0 0 0 16 9.5 6.5 6.5 0 1 0 9.5 16c1.61 0 3.09-.59 4.23-1.57l.27.28v.79l5 4.99L20.49 19l-4.99-5zm-6 0C7.01 14 5 11.99 5 9.5S7.01 5 9.5 5 14 7.01 14 9.5 11.99 14 9.5 14z'/%3E%3C/svg%3E");
+            background-repeat: no-repeat;
+            background-position: center;
+        }
+
+        /* Button Area */
+        .button-area {
+            margin-top: 28px;
+            display: flex;
+            gap: 12px;
+            justify-content: center;
+        }
+
+        .search-btn {
+            background-color: #f8f9fa;
+            border: 1px solid #f8f9fa;
+            border-radius: 4px;
+            color: #3c4043;
+            font-family: arial, sans-serif;
+            font-size: 14px;
+            margin: 0;
+            padding: 0 16px;
+            line-height: 27px;
+            height: 36px;
+            min-width: 54px;
+            text-align: center;
+            cursor: pointer;
+            user-select: none;
+        }
+
+        .search-btn:hover {
+            box-shadow: 0 1px 1px rgba(0, 0, 0, .1);
+            background-color: #f8f9fa;
+            border: 1px solid #dadce0;
+            color: #202124;
+        }
+
+        .search-btn:disabled {
+            opacity: 0.6;
+            cursor: default;
+        }
+
+        /* Loading Indicator */
+        #loadingIndicator {
+            margin-top: 10px;
+            font-size: 14px;
+        }
+
+        /* Suggestion Area */
+        #workSuggest {
+            margin-top: 20px;
+            width: 100%;
+            text-align: center;
+        }
+
+        #workSuggest button {
+            background: #fff;
+            border: 1px solid #dadce0;
+            border-radius: 18px;
+            padding: 8px 16px;
+            margin: 4px;
+            color: #1a0dab;
+            cursor: pointer;
+            font-size: 14px;
+        }
+
+        #workSuggest button:hover {
+            background: #f1f3f4;
+            text-decoration: underline;
+        }
+
+        /* Main Content Container */
+        .container {
+            width: 100%;
+            max-width: 1200px;
+            display: flex;
+            justify-content: center;
+            align-items: flex-start;
+            gap: 24px;
+            padding: 24px;
+            box-sizing: border-box;
+            flex-wrap: wrap;
+        }
+
+        /* Card Style */
+        .main-area,
+        .sidepanel {
+            background: #fff;
+            border: 1px solid #dadce0;
+            border-radius: 8px;
+            padding: 24px;
+            box-shadow: none;
+        }
+
+        .main-area {
+            flex: 1 1 600px;
+            min-width: 300px;
+        }
+
+        .sidepanel {
+            flex: 0 0 320px;
+            min-width: 300px;
+            height: auto;
+            max-height: 80vh;
+            overflow-y: auto;
+            position: sticky;
+            top: 20px;
+        }
+
+        /* Cytoscape Container */
+        #cy {
+            width: 100%;
+            height: 400px;
+            border: 1px solid #dadce0;
+            border-radius: 8px;
+            background: #f8f9fa;
+            margin-top: 20px;
+        }
+
+        /* Alert */
+        .alert {
+            background: #fce8e6;
+            color: #c5221f;
+            border: 1px solid #fce8e6;
+            padding: 12px;
+            border-radius: 4px;
+            display: inline-block;
+            margin-top: 10px;
+        }
+
+        .work-title {
+            font-size: 20px;
+            color: #202124;
+            margin-bottom: 12px;
+        }
+
+        .character-list {
+            font-size: 14px;
+            color: #4d5156;
+            line-height: 1.58;
+            margin-bottom: 20px;
+        }
+
+        .character-list span {
+            display: inline-block;
+            background: #f1f3f4;
+            border-radius: 12px;
+            padding: 2px 10px;
+            margin: 2px;
+            font-size: 12px;
+        }
+
+        /* Legend */
+        #legend {
+            position: relative;
+            background: transparent;
+            box-shadow: none;
+            padding: 10px 0;
+            font-size: 12px;
+            color: #5f6368;
+        }
+
+        /* History Buttons */
+        .history-btn {
+            background: #fff;
+            border: 1px solid #dadce0;
+            border-radius: 16px;
+            padding: 6px 12px;
+            margin: 4px;
+            font-size: 12px;
+            cursor: pointer;
+            color: #1a0dab;
+        }
+
+        .history-btn:hover {
+            background: #f1f3f4;
+        }
+
+        /* Mode Switch */
+        .mode-switch {
+            display: flex;
+            gap: 20px;
+            margin-bottom: 15px;
+            font-size: 14px;
+            color: #3c4043;
+        }
+
+        .mode-switch label {
+            cursor: pointer;
+            display: flex;
+            align-items: center;
+            gap: 6px;
+        }
+
+        /* Performance Summary */
+        .performance-summary {
+            background: #f8f9fa;
+            border-radius: 8px;
+            padding: 16px;
+            margin: 20px 0;
+        }
+
+        .performance-summary h3 {
+            margin: 0 0 12px 0;
+            font-size: 16px;
+            color: #202124;
+        }
+
+        .performance-summary .metric {
+            display: flex;
+            justify-content: space-between;
+            padding: 4px 0;
+            font-size: 14px;
+        }
+
+        .performance-summary .metric-label {
+            color: #5f6368;
+        }
+
+        .performance-summary .metric-value {
+            font-weight: bold;
+            color: #202124;
+        }
+
+        /* Relationship Table */
+        .relationship-table {
+            width: 100%;
+            border-collapse: collapse;
+            margin: 20px 0;
+            font-size: 14px;
+        }
+
+        .relationship-table th {
+            background: #f8f9fa;
+            padding: 12px;
+            text-align: left;
+            border-bottom: 2px solid #dadce0;
+            font-weight: 600;
+            color: #202124;
+        }
+
+        .relationship-table td {
+            padding: 10px 12px;
+            border-bottom: 1px solid #dadce0;
+        }
+
+        .relationship-table tr:hover {
+            background: #f8f9fa;
+            cursor: pointer;
+        }
+
+        .relation-badge {
+            display: inline-block;
+            padding: 4px 10px;
+            border-radius: 12px;
+            font-size: 12px;
+            font-weight: 500;
+            color: #fff;
+        }
+
+        /* Export Button */
+        .export-btn {
+            background-color: #1a73e8;
+            border: 1px solid #1a73e8;
+            border-radius: 4px;
+            color: #fff;
+            font-family: arial, sans-serif;
+            font-size: 14px;
+            padding: 0 16px;
+            line-height: 27px;
+            height: 36px;
+            cursor: pointer;
+            user-select: none;
+            margin-left: 8px;
+        }
+
+        .export-btn:hover {
+            background-color: #1765cc;
+            border-color: #1765cc;
+        }
+
+        /* Settings Panel */
+        .settings-panel {
+            background: #f8f9fa;
+            border: 1px solid #dadce0;
+            border-radius: 8px;
+            padding: 20px;
+            margin: 20px 0;
+            max-width: 584px;
+        }
+
+        .setting-section {
+            background: #fff;
+            padding: 12px;
+            border-radius: 4px;
+            margin-bottom: 12px;
+        }
+
+        .setting-section label {
+            display: block;
+            margin-bottom: 8px;
+            color: #202124;
+        }
+
+        .preset-select {
+            width: 100%;
+            padding: 8px;
+            border: 1px solid #dadce0;
+            border-radius: 4px;
+            font-size: 14px;
+            margin-top: 4px;
+        }
+
+        .property-checkboxes {
+            display: grid;
+            grid-template-columns: repeat(auto-fill, minmax(180px, 1fr));
+            gap: 8px;
+            margin-top: 8px;
+        }
+
+        .property-checkbox-item {
+            display: flex;
+            align-items: center;
+            gap: 6px;
+            font-size: 13px;
+        }
+
+        .depth-options {
+            display: flex;
+            flex-direction: column;
+            gap: 8px;
+            margin-top: 8px;
+        }
+
+        .depth-options label {
+            display: flex;
+            align-items: center;
+            gap: 6px;
+            margin: 0;
+            cursor: pointer;
+        }
+
+        .category-badge {
+            display: inline-block;
+            padding: 2px 6px;
+            border-radius: 4px;
+            font-size: 10px;
+            margin-left: 4px;
+            background: #e8f0fe;
+            color: #1967d2;
+        }
+
+        /* Responsive adjustments */
+        @media (max-width: 800px) {
+            .container {
+                flex-direction: column;
+                align-items: center;
+            }
+
+            .main-area,
+            .sidepanel {
+                width: 100%;
+                flex: none;
+            }
+
+            .sidepanel {
+                position: static;
+                max-height: none;
+            }
+        }
+    </style>
+</head>
+
+<body>
+
+    <!-- Header / Logo Area -->
+    <div class="header-area">
+        <div class="title">
+            <span class="logo-blue">W</span><span class="logo-red">i</span><span class="logo-yellow">k</span><span
+                class="logo-blue">i</span><span class="logo-green">d</span><span class="logo-red">a</span><span
+                class="logo-blue">t</span><span class="logo-yellow">a</span>
+            <span style="font-size: 0.8em; color: #5f6368; display: block; margin-top: 8px;">作品の人物関係抽出</span>
+        </div>
+        <button class="query-editor-btn" onclick="toggleQueryEditor()">🔧 クエリエディタ</button>
+    </div>
+
+    <!-- Query Editor Panel -->
+    <div id="queryEditorPanel" class="query-editor-panel">
+        <div class="query-editor-header">
+            <h2>クエリ実行設定</h2>
+            <button class="close-btn" onclick="toggleQueryEditor()">×</button>
+        </div>
+
+
+
+        <!-- クエリ実行設定 -->
+        <div class="query-section">
+            <label>クエリ実行設定</label>
+            <div class="config-grid">
+                <div class="config-item">
+                    <label>タイムアウト (秒)</label>
+                    <input type="number" id="queryTimeout" min="10" max="180" value="30">
+                </div>
+                <div class="config-item">
+                    <label>LIMIT件数</label>
+                    <input type="number" id="queryLimit" min="1" max="1000" value="100">
+                </div>
+                <div class="config-item">
+                    <label>リトライ回数</label>
+                    <input type="number" id="queryRetries" min="1" max="5" value="3">
+                </div>
+            </div>
+            <div class="query-buttons">
+                <button class="query-btn primary" onclick="applyQueryConfig()">設定を適用</button>
+                <button class="query-btn" onclick="resetQueryConfig()">リセット</button>
+            </div>
+        </div>
+
+
+    </div>
+
+    <!-- Search Area -->
+    <div class="search-box-wrap">
+
+
+        <div class="search-box-inner">
+            <input type="text" id="searchInput" placeholder="作品名を入力（例：ドラえもん、鬼滅の刃）">
+        </div>
+
+        <div class="button-area">
+            <button class="search-btn" id="searchBtn" onclick="handleSearch()">作品検索</button>
+        </div>
+
+        <span id="loadingIndicator" style="display:none; color:#4285f4; font-weight:bold; margin-top:10px;">ロード中…</span>
+        <div id="workSuggest"></div>
+
+        <!-- 設定パネル -->
+        <div id="settingsPanel" class="settings-panel" style="display:none;">
+            <h3 style="margin-top:0;">詳細設定</h3>
+
+            <!-- プリセット選択 -->
+            <div class="setting-section">
+                <label><strong>プリセット:</strong></label>
+                <select id="presetSelect" onchange="applyPreset(this.value)" class="preset-select">
+                    <option value="family">デフォルト (家族関係のみ)</option>
+                    <option value="all">網羅的 (全関係タイプ)</option>
+                    <option value="social">社会的関係重視</option>
+                    <option value="intellectual">知的関係重視</option>
+                    <option value="professional">職業的関係重視</option>
+                    <option value="custom">カスタム</option>
+                </select>
+            </div>
+
+            <!-- カテゴリ別プロパティ選択 -->
+            <div class="setting-section">
+                <label><strong>抽出する関係タイプ:</strong></label>
+                <div id="propertyCheckboxes" class="property-checkboxes"></div>
+            </div>
+
+            <!-- 検索深度 -->
+            <div class="setting-section">
+                <label><strong>検索深度:</strong></label>
+                <div class="depth-options">
+                    <label><input type="radio" name="depth" value="1" checked onchange="searchDepth=1"> 1次関係
+                        (直接)</label>
+                    <label><input type="radio" name="depth" value="2" onchange="searchDepth=2"> 2次関係 (間接)</label>
+                    <label><input type="radio" name="depth" value="3" onchange="searchDepth=3"> 3次関係 (広範囲) ⚠️遅い</label>
+                </div>
+            </div>
+
+            <button class="search-btn" onclick="toggleSettings()">設定を閉じる</button>
+        </div>
+
+        <button class="search-btn" id="toggleSettingsBtn" onclick="toggleSettings()" style="margin-top:12px;">⚙️
+            詳細設定</button>
+    </div>
+
+    <!-- Main Content Container -->
+    <div class="container">
+        <div class="main-area">
+            <div id="characterList"></div>
+            <div id="performanceSummary"></div>
+            <div id="graphTitle"></div>
+            <div id="cy"></div>
+            <div id="relationshipTable"></div>
+        </div>
+        <div class="sidepanel" id="sidepanel"></div>
+    </div>
+
+    <script>
+        const endpoint = "https://query.wikidata.org/sparql";
+        let selectedWorkID = "", selectedWorkLabel = "", characterArr = [], relationshipData = [];
+        let graphHistory = [];
+        // v4: currentMode削除（作品モードのみ）
+        const MAX_HISTORY = 3;
+
+        // カテゴリ別関係プロパティ
+        const relationCategories = {
+            family: [
+                { prop: 'P22', label: '父', color: '#e74c3c' },
+                { prop: 'P25', label: '母', color: '#9b59b6' },
+                { prop: 'P40', label: '子', color: '#2ecc71' },
+                { prop: 'P3373', label: '兄弟姉妹', color: '#3498db' },
+                { prop: 'P26', label: '配偶者', color: '#e67e22' },
+                { prop: 'P1038', label: '親族', color: '#16a085' },
+                { prop: 'P7', label: '兄', color: '#e85d75' },
+                { prop: 'P9', label: '姉妹', color: '#c27ba0' }
+            ],
+            social: [
+                { prop: 'P463', label: '所属組織', color: '#95a5a6' },
+                { prop: 'P451', label: 'パートナー', color: '#34495e' },
+                { prop: 'P2868', label: '友人', color: '#f39c12' }
+            ],
+            intellectual: [
+                { prop: 'P1066', label: '師匠', color: '#f1c40f' },
+                { prop: 'P802', label: '弟子', color: '#d4ac0d' },
+                { prop: 'P737', label: '影響を受けた', color: '#9c640c' },
+                { prop: 'P112', label: '創設者', color: '#7d6608' }
+            ],
+            professional: [
+                { prop: 'P108', label: '雇用者', color: '#5dade2' },
+                { prop: 'P1830', label: '所有者', color: '#3498db' },
+                { prop: 'P488', label: '議長', color: '#2874a6' }
+            ]
+        };
+
+        // 全プロパティを統合
+        let allRelationProps = [];
+        Object.values(relationCategories).forEach(cat => allRelationProps.push(...cat));
+
+        // 選択されたプロパティ（デフォルトは家族関係）
+        let selectedProperties = relationCategories.family.map(p => p.prop);
+
+        // 検索深度
+        let searchDepth = 1;
+
+        // 後方互換性のため
+        const edgeColors = {};
+        const relationProps = [];
+        allRelationProps.forEach(p => {
+            edgeColors[p.prop] = p.color;
+            relationProps.push(p);
+        });
+        // v4では genreQids を使用せず、直接作品名で部分一致検索を行う
+
+        // --- クエリ実行設定 ---
+        let queryTimeout = 30000; // ミリ秒
+        let queryLimit = 100;
+        let queryRetries = 3;
+
+        // --- クエリエディタ管理 ---
+        function toggleQueryEditor() {
+            const panel = document.getElementById('queryEditorPanel');
+            panel.classList.toggle('open');
+        }
+
+
+
+        function applyQueryConfig() {
+            queryTimeout = Math.max(10000, Math.min(180000, parseInt(document.getElementById('queryTimeout').value) * 1000));
+            queryLimit = Math.max(1, Math.min(1000, parseInt(document.getElementById('queryLimit').value)));
+            queryRetries = Math.max(1, Math.min(5, parseInt(document.getElementById('queryRetries').value)));
+
+            alert(`設定を適用しました:
+タイムアウト: ${queryTimeout / 1000}秒
+LIMIT: ${queryLimit}件
+リトライ: ${queryRetries}回`);
+        }
+
+        function resetQueryConfig() {
+            document.getElementById('queryTimeout').value = '30';
+            document.getElementById('queryLimit').value = '100';
+            document.getElementById('queryRetries').value = '3';
+            queryTimeout = 30000;
+            queryLimit = 100;
+            queryRetries = 3;
+            alert('設定をデフォルトにリセットしました。');
+        }
+
+
+
+        // --- 設定パネル管理 ---
+        function toggleSettings() {
+            const panel = document.getElementById('settingsPanel');
+            const btn = document.getElementById('toggleSettingsBtn');
+            if (panel.style.display === 'none') {
+                panel.style.display = 'block';
+                btn.textContent = '⚙️ 設定を閉じる';
+                if (!panel.dataset.initialized) {
+                    initializePropertyCheckboxes();
+                    panel.dataset.initialized = 'true';
+                }
+            } else {
+                panel.style.display = 'none';
+                btn.textContent = '⚙️ 詳細設定';
+            }
+        }
+
+        function initializePropertyCheckboxes() {
+            const container = document.getElementById('propertyCheckboxes');
+            let html = '';
+
+            Object.entries(relationCategories).forEach(([catKey, props]) => {
+                const catNames = {
+                    family: '家族',
+                    social: '社会的',
+                    intellectual: '知的',
+                    professional: '職業的'
+                };
+
+                html += `<div style="grid-column: 1/-1; font-weight:bold; margin-top:8px; color:#5f6368;">${catNames[catKey] || catKey}</div>`;
+
+                props.forEach(prop => {
+                    const checked = selectedProperties.includes(prop.prop) ? 'checked' : '';
+                    html += `
+                        <label class="property-checkbox-item">
+                            <input type="checkbox" value="${prop.prop}" ${checked} onchange="toggleProperty('${prop.prop}')">
+                            <span>${prop.label}</span>
+                        </label>
+                    `;
+                });
+            });
+
+            container.innerHTML = html;
+        }
+
+        function toggleProperty(propId) {
+            const idx = selectedProperties.indexOf(propId);
+            if (idx > -1) {
+                selectedProperties.splice(idx, 1);
+            } else {
+                selectedProperties.push(propId);
+            }
+            // プリセットをカスタムに変更
+            document.getElementById('presetSelect').value = 'custom';
+        }
+
+        function applyPreset(presetName) {
+            const presets = {
+                family: relationCategories.family.map(p => p.prop),
+                all: allRelationProps.map(p => p.prop),
+                social: [...relationCategories.social, ...relationCategories.professional].map(p => p.prop),
+                intellectual: [...relationCategories.intellectual, ...relationCategories.family.slice(0, 3)].map(p => p.prop),
+                professional: relationCategories.professional.map(p => p.prop)
+            };
+
+            if (presets[presetName]) {
+                selectedProperties = [...presets[presetName]];
+                // チェックボックスを更新
+                document.querySelectorAll('#propertyCheckboxes input[type="checkbox"]').forEach(cb => {
+                    cb.checked = selectedProperties.includes(cb.value);
+                });
+            }
+        }
+
+        // v4: 作品検索モードのみ、モード切替機能廃止
+
+        function handleSearch() {
+            // v4: 作品検索のみ
+            searchWorks();
+        }
+
+        // --- 作品検索 (v4: カテゴリ指定なしの部分一致検索) ---
+        async function searchWorks() {
+            const searchBtn = document.getElementById('searchBtn');
+            const loading = document.getElementById('loadingIndicator');
+            if (searchBtn) searchBtn.disabled = true;
+            if (loading) loading.style.display = '';
+            let word = document.getElementById('searchInput').value;
+            if (!word || word.length < 2) {
+                document.getElementById('workSuggest').innerHTML = "<span class='alert'>2文字以上で作品名を入力してください。</span>";
+                if (loading) loading.style.display = 'none';
+                if (searchBtn) searchBtn.disabled = false;
+                return;
+            }
+
+            // 新しいクエリ: 作品タイプを指定せず、作品名の部分一致で検索し、登場人物5人以上をフィルタ
+            let q = `
+      SELECT DISTINCT ?work ?workLabel ?workTypeLabel 
+             (COUNT(DISTINCT ?character) AS ?characterCount)
+      WHERE {
+        ?work wdt:P31 ?workType .
+        ?work wdt:P674 ?character .
+        ?work rdfs:label ?label .
+        FILTER(CONTAINS(LCASE(?label), LCASE("${word}")))
+        SERVICE wikibase:label { bd:serviceParam wikibase:language "ja,en". }
+      }
+      GROUP BY ?work ?workLabel ?workTypeLabel
+      HAVING (COUNT(DISTINCT ?character) >= 5)
+      ORDER BY DESC(?characterCount)
+      LIMIT ${queryLimit}
+    `;
+
+            try {
+                let res = await runSparql(q);
+                let bindings = res.results.bindings;
+
+                if (bindings.length === 0) {
+                    document.getElementById('workSuggest').innerHTML = "<span class='alert'>該当作品なし（登場人物5人以上のみ表示）</span>";
+                    clearResults();
+                    if (loading) loading.style.display = 'none';
+                    if (searchBtn) searchBtn.disabled = false;
+                    return;
+                }
+
+                let s = "<span class='subtle'>候補作品（登場人物5人以上）：</span><br>";
+                bindings.forEach(b => {
+                    let id = b.work.value.split('/').pop();
+                    let label = b.workLabel?.value || id;
+                    let workType = b.workTypeLabel?.value || '不明';
+                    let count = parseInt(b.characterCount.value);
+                    s += `<button onclick="selectWork('${id}','${label}')">${label} (${workType} / ${count}人)</button><br>`;
+                });
+
+                document.getElementById('workSuggest').innerHTML = s;
+                clearResults();
+            } catch (e) {
+                console.error('SPARQL Error:', e);
+                document.getElementById('workSuggest').innerHTML = `<span class='alert'>検索エラー: ${e.message}</span>`;
+                clearResults();
+            } finally {
+                if (loading) loading.style.display = 'none';
+                if (searchBtn) searchBtn.disabled = false;
+            }
+        }
+
+        // --- 人物検索 (v4では削除) ---
+        // v4では使用しない関数（以前の人物モード用）
+        /*
+        async function searchPersons() {
+            const searchBtn = document.getElementById('searchBtn');
+            const loading = document.getElementById('loadingIndicator');
+            if (searchBtn) searchBtn.disabled = true;
+            if (loading) loading.style.display = '';
+            let word = document.getElementById('searchInput').value;
+            if (!word) {
+                document.getElementById('workSuggest').innerHTML = "<span class='alert'>人物名を入力してください。</span>";
+                if (loading) loading.style.display = 'none';
+                if (searchBtn) searchBtn.disabled = false;
+                return;
+            }
+
+            let q = `
+        SELECT DISTINCT ?person ?personLabel WHERE {
+          ?person wdt:P31 wd:Q5 .
+          ?person wdt:P27 wd:Q17 .
+          ?person rdfs:label ?personLabel .
+          FILTER(LANG(?personLabel) = "ja")
+          FILTER(CONTAINS(?personLabel, "${word}"))
+        }
+        ORDER BY ?personLabel
+        LIMIT ${queryLimit}
+      `;
+
+            try {
+                let res = await runSparql(q);
+                let bindings = res.results.bindings;
+                let s = "<span class='subtle'>候補人物：</span><br>";
+
+                if (bindings.length === 0) {
+                    s += "<span class='alert'>該当する人物が見つかりません。</span>";
+                } else {
+                    bindings.forEach(b => {
+                        let id = b.person.value.split('/').pop();
+                        let label = b.personLabel.value;
+                        s += `<button onclick="selectPerson('${id}','${label}')">${label} (${id})</button><br>`;
+                    });
+                }
+                document.getElementById('workSuggest').innerHTML = s;
+                clearResults();
+            } catch (e) {
+                document.getElementById('workSuggest').innerHTML = `<span class='alert'>エラーが発生しました: ${e.message}</span>`;
+            } finally {
+                if (loading) loading.style.display = 'none';
+                if (searchBtn) searchBtn.disabled = false;
+            }
+        }
+        */
+
+        async function runSparql(query) {
+            let url = endpoint + "?query=" + encodeURIComponent(query);
+            let headers = { 'Accept': 'application/sparql-results+json' };
+
+            const maxRetries = queryRetries;  // 使用可能なリトライ回数
+            let attempt = 0;
+
+            while (attempt < maxRetries) {
+                try {
+                    const controller = new AbortController();
+                    const timeoutId = setTimeout(() => controller.abort(), queryTimeout); // ユーザー設定のタイムアウト
+
+                    let resp = await fetch(url, {
+                        headers,
+                        signal: controller.signal
+                    });
+                    clearTimeout(timeoutId);
+
+                    if (!resp.ok) {
+                        if (resp.status === 429) {
+                            throw new Error('レート制限エラー: しばらく時間を置いてから再試行してください');
+                        }
+                        throw new Error(`SPARQL fetch failed: ${resp.status}`);
+                    }
+                    return await resp.json();
+                } catch (e) {
+                    attempt++;
+                    console.warn(`SPARQL attempt ${attempt} failed:`, e);
+                    if (attempt >= maxRetries) throw e;
+                    // 429エラーの場合はより長く待つ
+                    const waitTime = e.message.includes('429') ? 3000 * attempt : 500 * Math.pow(2, attempt - 1);
+                    await new Promise(r => setTimeout(r, waitTime));
+                }
+            }
+        }
+
+        async function fetchCharactersFlexible(workQid, workLabel) {
+            let q = `SELECT DISTINCT ?character ?characterLabel WHERE {
+    wd:${workQid} wdt:P674 ?character .
+    SERVICE wikibase:label { bd:serviceParam wikibase:language "ja,en". }
+  } LIMIT ${queryLimit}`;
+            let res = await runSparql(q);
+            return res.results.bindings;
+        }
+
+        async function selectWork(id, label) {
+            selectedWorkID = id; selectedWorkLabel = label;
+            characterArr = await fetchCharactersFlexible(id, label);
+            if (characterArr.length === 0) {
+                document.getElementById('characterList').innerHTML =
+                    `<span class='alert'>登場人物未取得（0名）。Wikidataのデータ不足、または表記ゆれの可能性があります。</span>`;
+                clearResults();
+                return;
+            }
+            let out = `<div class="work-title">${selectedWorkLabel}（登場人物${characterArr.length}名）</div>`;
+            out += `<div class="character-list">`;
+            characterArr.forEach(obj => {
+                out += `<span>${obj.characterLabel?.value || obj.character.value.split('/').pop()}</span> `;
+            });
+            out += `</div>`;
+            document.getElementById('characterList').innerHTML = out;
+
+            // 関係抽出を自動実行
+            await extractAllRelationships();
+        }
+
+        // --- 人物選択 ---
+        async function selectPerson(id, label) {
+            selectedWorkID = id;
+            selectedWorkLabel = label;
+
+            const loading = document.getElementById('loadingIndicator');
+            if (loading) {
+                loading.style.display = '';
+                loading.textContent = '関連人物を検索中...';
+            }
+
+            try {
+                // シンプルなクエリで周辺人物を検索（日本国籍者に限定）
+                let q = `
+        SELECT DISTINCT ?item ?itemLabel WHERE {
+          { wd:${id} ?p ?item. } UNION { ?item ?p wd:${id}. }
+          ?item wdt:P31 wd:Q5.
+          ?item wdt:P27 wd:Q17.
+          SERVICE wikibase:label { bd:serviceParam wikibase:language "ja,en". }
+        }
+        LIMIT 50
+      `;
+                let res = await runSparql(q);
+                let relatedPeople = res.results.bindings;
+
+                // 選択された人物自身を最初に追加（中心人物として）
+                characterArr = [{
+                    character: { value: `http://www.wikidata.org/entity/${id}` },
+                    characterLabel: { value: label }
+                }];
+
+                // 関連人物を追加
+                const relatedFiltered = relatedPeople.map(b => ({
+                    character: b.item,
+                    characterLabel: b.itemLabel
+                })).filter(obj => {
+                    // 有効なラベルを持つもののみを残す
+                    const lbl = getLabel(obj, 'character');
+                    // 選択された人物自身は除外（既に追加済み）
+                    const objId = obj.character.value.split('/').pop();
+                    return lbl !== null && objId !== id;
+                });
+
+                characterArr.push(...relatedFiltered);
+
+                if (characterArr.length <= 1) {
+                    document.getElementById('characterList').innerHTML = `<span class='alert'>関係人物が見つかりませんでした。</span>`;
+                    if (loading) {
+                        loading.style.display = 'none';
+                        loading.textContent = 'ロード中…';
+                    }
+                    return;
+                }
+
+                let out = `<div class="work-title">${selectedWorkLabel}（本人 + 関係人物${characterArr.length - 1}名）</div>`;
+                out += `<div class="character-list">`;
+                characterArr.forEach((obj, index) => {
+                    const lbl = getLabel(obj, 'character');
+                    if (lbl) {
+                        // 最初の人物（選択された本人）には太字スタイルを適用
+                        if (index === 0) {
+                            out += `<span style="font-weight: bold; background: #e8f0fe;">${lbl} ★</span> `;
+                        } else {
+                            out += `<span>${lbl}</span> `;
+                        }
+                    }
+                });
+                out += `</div>`;
+                document.getElementById('characterList').innerHTML = out;
+
+                // 関係性グラフ生成ボタンを表示（自動実行はしない）
+                document.getElementById('performanceSummary').innerHTML = `
+                    <button class="search-btn" onclick="extractPersonRelationships('${id}')" style="margin-top: 12px;">
+                        📊 関係性グラフを生成
+                    </button>
+                    <p style="font-size: 12px; color: #5f6368; margin-top: 8px;">
+                        ※ グラフ生成には時間がかかる場合があります
+                    </p>
+                `;
+            } catch (e) {
+                console.error('Error in selectPerson:', e);
+                let errorMsg = e.message || 'Unknown error';
+                if (errorMsg.includes('429') || errorMsg.includes('レート制限')) {
+                    errorMsg = 'Wikidataのアクセス制限に達しました。数分後に再試行してください。';
+                } else if (errorMsg.includes('abort')) {
+                    errorMsg = 'タイムアウトしました。検索条件を絞り込むか、後で再試行してください。';
+                }
+                document.getElementById('characterList').innerHTML = `<span class='alert'>エラーが発生しました: ${errorMsg}</span>`;
+                const loading = document.getElementById('loadingIndicator');
+                if (loading) {
+                    loading.style.display = 'none';
+                    loading.textContent = 'ロード中…';
+                }
+            }
+        }
+
+        // ラベル検証ヘルパー：URLやQIDのみの場合はfalse
+        function isValidLabel(label) {
+            if (!label || !label.trim()) return false;
+            // URLの場合はfalse
+            if (label.startsWith('http://') || label.startsWith('https://')) {
+                return false;
+            }
+            // QIDのみの場合もfalse（人間可読な名前が必要）
+            if (/^Q\d+$/.test(label)) {
+                return false;
+            }
+            return true;
+        }
+
+        // ラベル取得ヘルパー：有効なラベルのみ返す
+        function getLabel(binding, varName) {
+            const labelKey = varName + 'Label';
+            if (binding[labelKey] && binding[labelKey].value && binding[labelKey].value.trim()) {
+                const label = binding[labelKey].value;
+                // URL検証
+                if (isValidLabel(label)) {
+                    return label;
+                }
+            }
+            return null; // 有効なラベルがない場合はnull
+        }
+
+        // 双方向エッジの統合：同じ人物ペアで同じ関係種別のエッジを1本に統合
+        function mergeEdges(relationshipData) {
+            // 対等な関係（双方向統合対象）のプロパティ
+            const symmetricRelations = new Set(['P26', 'P3373', 'P1038']); // 配偶者、兄弟姉妹、親族
+
+            const edgeMap = {};
+            const unmergedEdges = [];
+
+            relationshipData.forEach(rel => {
+                // 向きが意味を持つ関係（父・母・子・師匠など）は統合せずにそのまま追加
+                if (!symmetricRelations.has(rel.relation.prop)) {
+                    unmergedEdges.push({
+                        personA: rel.personA,
+                        personB: rel.personB,
+                        relation: rel.relation,
+                        isBidirectional: false
+                    });
+                    return;
+                }
+
+                // 対等な関係のみ双方向統合処理
+                const ids = [rel.personA.id, rel.personB.id].sort();
+                const pairKey = ids.join('_');
+                const edgeKey = `${pairKey}_${rel.relation.prop}`;
+
+                if (edgeMap[edgeKey]) {
+                    // 既存エッジがある場合、双方向としてマーク
+                    edgeMap[edgeKey].isBidirectional = true;
+                } else {
+                    // 新規エッジを登録
+                    edgeMap[edgeKey] = {
+                        personA: rel.personA,
+                        personB: rel.personB,
+                        relation: rel.relation,
+                        isBidirectional: false,
+                        // ソート順で統一（小さいIDをsourceに）
+                        source: ids[0] === rel.personA.id ? rel.personA : rel.personB,
+                        target: ids[0] === rel.personA.id ? rel.personB : rel.personA
+                    };
+                }
+            });
+
+            // 統合された対等な関係と、統合されない向きのある関係を結合
+            return [...Object.values(edgeMap), ...unmergedEdges];
+        }
+
+        // --- 全人物の関係抽出（作品モード・深度対応） ---
+        async function extractAllRelationships() {
+            const loading = document.getElementById('loadingIndicator');
+            if (loading) loading.style.display = '';
+
+            relationshipData = [];
+
+            // 選択されたプロパティのみをフィルタ
+            const activeProps = relationProps.filter(r => selectedProperties.includes(r.prop));
+
+            // 探索済み人物IDを追跡（重複クエリ防止）
+            const queriedPersonIds = new Set();
+            // 各人物のラベルをキャッシュ
+            const personLabels = {};
+
+            // 初期キャラクター一覧を最初の探索対象に設定
+            let currentDepthPersons = characterArr.map(chara => {
+                const id = chara.character.value.split('/').pop();
+                const label = getLabel(chara, 'character');
+                if (label) personLabels[id] = label;
+                return { id, label };
+            }).filter(p => p.label);
+
+            for (let depth = 1; depth <= searchDepth; depth++) {
+                if (currentDepthPersons.length === 0) break;
+
+                if (loading) {
+                    loading.textContent = searchDepth > 1
+                        ? `関係抽出中... 深度${depth}/${searchDepth} (対象${currentDepthPersons.length}人)`
+                        : 'ロード中…';
+                }
+
+                const newPersonsAtThisDepth = []; // この深度で新たに発見された人物
+
+                for (const person of currentDepthPersons) {
+                    if (queriedPersonIds.has(person.id)) continue;
+                    queriedPersonIds.add(person.id);
+
+                    for (const relObj of activeProps) {
+                        let q = `SELECT ?target ?targetLabel WHERE {
+            wd:${person.id} wdt:${relObj.prop} ?target.
+            SERVICE wikibase:label { bd:serviceParam wikibase:language "ja, en". }
+          }`;
+
+                        try {
+                            let res = await runSparql(q);
+                            res.results.bindings.forEach(binding => {
+                                let targetId = binding.target.value.split('/').pop();
+                                let targetLabel = getLabel(binding, 'target');
+
+                                if (person.label && targetLabel) {
+                                    relationshipData.push({
+                                        personA: { id: person.id, label: person.label },
+                                        relation: relObj,
+                                        personB: { id: targetId, label: targetLabel }
+                                    });
+
+                                    // 未探索の人物を次の深度の探索対象に追加
+                                    if (!queriedPersonIds.has(targetId) && !personLabels[targetId]) {
+                                        personLabels[targetId] = targetLabel;
+                                        newPersonsAtThisDepth.push({ id: targetId, label: targetLabel });
+                                    }
+                                }
+                            });
+                        } catch (e) {
+                            console.warn(`Failed to fetch ${relObj.prop} for ${person.id}:`, e);
+                        }
+                    }
+                }
+
+                // 次の深度では、この深度で新たに発見された人物を探索
+                currentDepthPersons = newPersonsAtThisDepth;
+            }
+
+            if (loading) {
+                loading.style.display = 'none';
+                loading.textContent = 'ロード中…';
+            }
+
+            // 結果を表示
+            showPerformanceSummary();
+            renderVisualization();
+        }
+
+        // --- 人物の関係抽出（人物モード） ---
+        async function extractPersonRelationships(personId) {
+            const loading = document.getElementById('loadingIndicator');
+            if (loading) {
+                loading.style.display = '';
+                loading.textContent = '関係情報を収集中...';
+            }
+
+            relationshipData = [];
+
+            try {
+                // 選択されたプロパティのみをフィルタ
+                const activeProps = relationProps.filter(r => selectedProperties.includes(r.prop));
+
+                // 進捗表示用
+                const totalSteps = activeProps.length;
+                let currentStep = 0;
+
+                // 中心人物のラベルを取得
+                let centerPerson = characterArr.find(c => c.character.value.split('/').pop() === personId);
+                let centerLabel = centerPerson ? getLabel(centerPerson, 'character') : personId;
+
+                for (const relObj of activeProps) {
+                    // 進捗表示更新
+                    currentStep++;
+                    if (loading && totalSteps > 0) {
+                        const percent = Math.floor((currentStep / totalSteps) * 100);
+                        loading.textContent = `関係情報を収集中... ${percent}% (${currentStep}/${totalSteps})`;
+                    }
+
+                    // 中心人物から他者への関係
+                    let q1 = `SELECT ?target ?targetLabel WHERE {
+              wd:${personId} wdt:${relObj.prop} ?target.
+              ?target wdt:P31 wd:Q5.
+              SERVICE wikibase:label { bd:serviceParam wikibase:language "ja, en". }
+            }`;
+
+                    try {
+                        let res = await runSparql(q1);
+                        res.results.bindings.forEach(binding => {
+                            let targetId = binding.target.value.split('/').pop();
+                            let targetLabel = getLabel(binding, 'target');
+
+                            // 両方が有効なラベルを持つ場合のみ追加
+                            if (centerLabel && targetLabel) {
+                                relationshipData.push({
+                                    personA: { id: personId, label: centerLabel },
+                                    relation: relObj,
+                                    personB: { id: targetId, label: targetLabel }
+                                });
+                            }
+                        });
+                    } catch (e) {
+                        console.warn(`Failed to fetch ${relObj.prop} for ${personId}:`, e);
+                    }
+
+                    // 他者から中心人物への関係（逆方向）
+                    let q2 = `SELECT ?source ?sourceLabel WHERE {
+              ?source wdt:${relObj.prop} wd:${personId}.
+              ?source wdt:P31 wd:Q5.
+              SERVICE wikibase:label { bd:serviceParam wikibase:language "ja, en". }
+            }`;
+
+                    try {
+                        let res = await runSparql(q2);
+                        res.results.bindings.forEach(binding => {
+                            let sourceId = binding.source.value.split('/').pop();
+                            let sourceLabel = getLabel(binding, 'source');
+
+                            // 両方が有効なラベルを持つ場合のみ追加
+                            if (sourceLabel && centerLabel) {
+                                relationshipData.push({
+                                    personA: { id: sourceId, label: sourceLabel },
+                                    relation: relObj,
+                                    personB: { id: personId, label: centerLabel }
+                                });
+                            }
+                        });
+                    } catch (e) {
+                        console.warn(`Failed to fetch reverse ${relObj.prop} for ${personId}:`, e);
+                    }
+                }
+
+                // 結果を表示
+                showPerformanceSummary();
+                renderVisualization();
+
+            } catch (err) {
+                console.error("Critical error in extractPersonRelationships:", err);
+                alert("人物関係抽出中にエラーが発生しました: " + err.message);
+            } finally {
+                if (loading) {
+                    loading.style.display = 'none';
+                    loading.textContent = 'ロード中…'; // リセット
+                }
+            }
+        }
+
+        // --- 性能評価サマリの表示 ---
+        function showPerformanceSummary() {
+            let totalPairs = relationshipData.length;
+            let uniquePeople = new Set();
+            relationshipData.forEach(rel => {
+                uniquePeople.add(rel.personA.id);
+                uniquePeople.add(rel.personB.id);
+            });
+
+            // 関係種別ごとの集計
+            let relationCounts = {};
+            relationProps.forEach(r => relationCounts[r.label] = 0);
+            relationshipData.forEach(rel => {
+                relationCounts[rel.relation.label]++;
+            });
+
+            let html = `<div class="performance-summary">
+        <h3>抽出結果サマリ</h3>
+        <div class="metric">
+          <span class="metric-label">総人物数：</span>
+          <span class="metric-value">${uniquePeople.size}名</span>
+        </div>
+        <div class="metric">
+          <span class="metric-label">総関係ペア数：</span>
+          <span class="metric-value">${totalPairs}件</span>
+        </div>
+        <hr style="margin: 12px 0; border: none; border-top: 1px solid #dadce0;">
+        <div style="font-weight: 600; margin-bottom: 8px;">関係種別ごとの件数：</div>`;
+
+            relationProps.forEach(r => {
+                if (relationCounts[r.label] > 0) {
+                    html += `<div class="metric">
+            <span class="metric-label">${r.label}：</span>
+            <span class="metric-value">${relationCounts[r.label]}件</span>
+          </div>`;
+                }
+            });
+
+            html += `<div style="margin-top: 16px;">
+        <button class="export-btn" onclick="exportToCSV()">CSV エクスポート</button>
+      </div>
+      </div>`;
+
+            document.getElementById('performanceSummary').innerHTML = html;
+        }
+
+        // --- CSV エクスポート ---
+        function exportToCSV() {
+            if (relationshipData.length === 0) {
+                alert('エクスポートするデータがありません。');
+                return;
+            }
+
+            // CSV ヘッダー
+            let csv = '人物A (QID),人物A (ラベル),関係種別,人物B (QID),人物B (ラベル)\n';
+
+            // データ行
+            relationshipData.forEach(rel => {
+                csv += `${rel.personA.id},"${rel.personA.label}",${rel.relation.label},${rel.personB.id},"${rel.personB.label}"\n`;
+            });
+
+            // Blob作成とダウンロード
+            const blob = new Blob([csv], { type: 'text/csv;charset=utf-8;' });
+            const link = document.createElement('a');
+            const url = URL.createObjectURL(blob);
+            link.setAttribute('href', url);
+            link.setAttribute('download', `${selectedWorkLabel}_relationships_${new Date().getTime()}.csv`);
+            link.style.visibility = 'hidden';
+            document.body.appendChild(link);
+            link.click();
+            document.body.removeChild(link);
+        }
+
+        // --- グラフとテーブルの描画 ---
+        function renderVisualization() {
+            // 凡例
+            document.getElementById('graphTitle').innerHTML = getLegendHtml();
+
+            // エッジの統合（双方向エッジの検出）
+            const mergedRelationships = mergeEdges(relationshipData);
+
+            // Cytoscape グラフ
+            let nodes = [];
+            let edges = [];
+            let nodeMap = new Set();
+
+            mergedRelationships.forEach((rel, idx) => {
+                // ノードの追加
+                if (!nodeMap.has(rel.personA.id)) {
+                    nodes.push({ data: { id: rel.personA.id, label: rel.personA.label } });
+                    nodeMap.add(rel.personA.id);
+                }
+                if (!nodeMap.has(rel.personB.id)) {
+                    nodes.push({ data: { id: rel.personB.id, label: rel.personB.label } });
+                    nodeMap.add(rel.personB.id);
+                }
+
+                // エッジの追加（双方向フラグ付き）
+                edges.push({
+                    data: {
+                        id: `edge_${idx}`,
+                        source: rel.source ? rel.source.id : rel.personA.id,
+                        target: rel.target ? rel.target.id : rel.personB.id,
+                        relation: rel.relation,
+                        isBidirectional: rel.isBidirectional
+                    }
+                });
+            });
+
+            renderCytoscape(nodes, edges);
+
+            // 関係テーブル（元のrelationshipDataを使用）
+            renderRelationshipTable();
+
+            // 履歴保存
+            saveGraphHistory({
+                qid: selectedWorkID,
+                kind: "normal",
+                nodes: JSON.parse(JSON.stringify(nodes)),
+                edges: JSON.parse(JSON.stringify(edges)),
+                title: selectedWorkLabel,
+                timestamp: new Date(),
+                relationshipData: JSON.parse(JSON.stringify(relationshipData)),
+                characterArr: JSON.parse(JSON.stringify(characterArr))
+            });
+        }
+
+        // --- 関係テーブルの描画 ---
+        function renderRelationshipTable() {
+            if (relationshipData.length === 0) {
+                document.getElementById('relationshipTable').innerHTML = '';
+                return;
+            }
+
+            let html = `<h3 style="margin: 20px 0 12px 0;">人物関係一覧</h3>
+        <table class="relationship-table">
+          <thead>
+            <tr>
+              <th>人物A</th>
+              <th>関係種別</th>
+              <th>人物B</th>
+            </tr>
+          </thead>
+          <tbody>`;
+
+            relationshipData.forEach(rel => {
+                let color = edgeColors[rel.relation.prop] || '#999';
+                html += `<tr onclick="highlightNodes('${rel.personA.id}', '${rel.personB.id}')">
+          <td>${rel.personA.label}</td>
+          <td><span class="relation-badge" style="background-color: ${color};">${rel.relation.label}</span></td>
+          <td>${rel.personB.label}</td>
+        </tr>`;
+            });
+
+            html += `</tbody></table>`;
+            document.getElementById('relationshipTable').innerHTML = html;
+        }
+
+        // --- ノードハイライト ---
+        let cy = null;
+        function highlightNodes(idA, idB) {
+            if (!cy) return;
+
+            cy.nodes().removeClass('highlighted');
+            cy.nodes(`#${idA}, #${idB}`).addClass('highlighted');
+            cy.fit(cy.nodes(`#${idA}, #${idB}`), 100);
+        }
+
+        // --- Cytoscape 描画 ---
+        function renderCytoscape(nodes, edges) {
+            cy = cytoscape({
+                container: document.getElementById('cy'),
+                elements: [...nodes, ...edges],
+                style: [
+                    {
+                        selector: 'node',
+                        style: {
+                            'label': 'data(label)',
+                            'background-color': '#4096d8',
+                            'width': 40,
+                            'height': 40,
+                            'font-size': 12,
+                            'text-wrap': 'wrap',
+                            'text-max-width': 80
+                        }
+                    },
+                    {
+                        selector: 'node.highlighted',
+                        style: {
+                            'background-color': '#ea4335',
+                            'width': 50,
+                            'height': 50
+                        }
+                    },
+                    {
+                        selector: 'edge',
+                        style: {
+                            'line-color': 'data(edgeColor)',
+                            'width': 5,
+                            'curve-style': 'bezier',
+                            'target-arrow-shape': 'triangle',
+                            'target-arrow-color': 'data(edgeColor)',
+                            'label': ''
+                        }
+                    },
+                    {
+                        selector: 'edge[isBidirectional]',
+                        style: {
+                            'source-arrow-shape': 'triangle',
+                            'source-arrow-color': 'data(edgeColor)',
+                            'target-arrow-shape': 'triangle',
+                            'target-arrow-color': 'data(edgeColor)'
+                        }
+                    },
+                ],
+                layout: { name: 'cose', animate: false }
+            });
+
+            cy.edges().forEach(edge => {
+                const prop = edge.data('relation')?.prop;
+                edge.data('edgeColor', edgeColors[prop] || '#c56');
+            });
+            cy.style().update();
+
+            // イベントハンドラ設定
+            cy.on('mouseover', 'edge', function (evt) {
+                const edge = evt.target;
+                const rel = edge.data('relation');
+                if (rel && rel.label) edge.style('label', rel.label);
+            });
+            cy.on('mouseout', 'edge', function (evt) {
+                evt.target.style('label', '');
+            });
+
+            // タッチ端末対応
+            let lastTapEdge = null;
+            cy.on('tap', 'edge', function (evt) {
+                if (lastTapEdge) lastTapEdge.style('label', '');
+                lastTapEdge = evt.target;
+                const rel = lastTapEdge.data('relation');
+                if (rel && rel.label) lastTapEdge.style('label', rel.label);
+            });
+            cy.on('tapend', function () {
+                if (lastTapEdge) lastTapEdge.style('label', '');
+                lastTapEdge = null;
+            });
+
+            // ノードクリックで詳細表示
+            cy.on('tap', 'node', evt => {
+                let nodeId = evt.target.data('id');
+                showSidePanel(nodeId);
+            });
+        }
+
+        // --- 凡例HTML生成 ---
+        function getLegendHtml() {
+            let legendHtml = '<div id="legend"><span style="font-weight:bold;">関係性カラー：</span><br>';
+            relationProps.forEach(r => {
+                legendHtml += `<span style="display:inline-block; margin:3px 13px 3px 0;">
+          <svg style="vertical-align:middle;" width="29" height="20">
+            <defs><marker id="arrow_${r.prop}" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="7" markerHeight="7" orient="auto">
+              <path d="M 0 0 L 10 5 L 0 10 z" fill="${edgeColors[r.prop]}"/>
+            </marker></defs>
+            <line x1="3" y1="12" x2="25" y2="12" stroke="${edgeColors[r.prop]}" stroke-width="4" marker-end="url(#arrow_${r.prop})"/>
+          </svg>
+          <span style="margin-left:2px;">${r.label}</span>
+        </span>`;
+            });
+            legendHtml += '</div>';
+            return legendHtml;
+        }
+
+        // --- 履歴グラフの再描画 ---
+        function showHistoryGraph(idx) {
+            let rec = graphHistory[idx];
+
+            // 作品情報を復元
+            selectedWorkID = rec.qid;
+            selectedWorkLabel = rec.title;
+
+            // relationshipDataを復元（保存されている場合）
+            if (rec.relationshipData) {
+                relationshipData = rec.relationshipData;
+            }
+
+            // キャラクター一覧を復元
+            if (rec.characterArr && rec.characterArr.length > 0) {
+                characterArr = rec.characterArr;
+                let out = `<div class="work-title">${rec.title}（登場人物${characterArr.length}名）</div>`;
+                out += `<div class="character-list">`;
+                characterArr.forEach(obj => {
+                    const lbl = obj.characterLabel?.value || obj.character?.value?.split('/').pop() || '';
+                    if (lbl) out += `<span>${lbl}</span> `;
+                });
+                out += `</div>`;
+                document.getElementById('characterList').innerHTML = out;
+            }
+
+            // サマリと関係テーブルを復元
+            if (rec.relationshipData) {
+                showPerformanceSummary();
+                renderRelationshipTable();
+            }
+
+            // グラフを再描画
+            document.getElementById('graphTitle').innerHTML = `<div><strong>${rec.title}</strong></div>` + getLegendHtml();
+            renderCytoscape(rec.nodes, rec.edges);
+        }
+
+        // --- 履歴リスト表示 ---
+        function renderGraphHistoryList() {
+            let html = "<div><strong>過去グラフ履歴：</strong></div>";
+            graphHistory.forEach((rec, idx) => {
+                const date = rec.timestamp.toLocaleTimeString();
+                let label = `[${rec.title}${rec.kind === "merged" ? "（合体）" : ""}] ${date}`;
+                html += `<button class="history-btn" onclick="showHistoryGraph(${idx})">${label}</button> `;
+            });
+            document.getElementById('sidepanel').innerHTML = html + "<hr style='margin:12px 0'>";
+        }
+
+        // --- 履歴管理 ---
+        function saveGraphHistory(newRec) {
+            if (graphHistory.length >= MAX_HISTORY) graphHistory.shift();
+            graphHistory.push(newRec);
+            localStorage.setItem('wikidata_relationship_history', JSON.stringify(graphHistory));
+            renderGraphHistoryList();
+        }
+
+        function loadGraphHistory() {
+            const saved = localStorage.getItem('wikidata_relationship_history');
+            if (saved) {
+                try {
+                    graphHistory = JSON.parse(saved);
+                    graphHistory.forEach(rec => {
+                        if (typeof rec.timestamp === 'string') rec.timestamp = new Date(rec.timestamp);
+                    });
+                } catch (e) {
+                    console.error("History load failed", e);
+                    graphHistory = [];
+                }
+            }
+            renderGraphHistoryList();
+        }
+
+        // --- サイドパネル詳細表示 ---
+        async function showSidePanel(id) {
+            let q = `SELECT ?item ?itemLabel ?desc WHERE {
+        VALUES ?item { wd:${id} }
+        OPTIONAL { ?item rdfs:label ?itemLabel. FILTER(LANG(?itemLabel)="ja") }
+        OPTIONAL{ ?item schema:description ?desc. FILTER(LANG(?desc)="ja") }
+      } LIMIT 1`;
+            try {
+                let res = await runSparql(q);
+                let info = res.results.bindings[0];
+                let wikidataUrl = 'https://www.wikidata.org/wiki/' + id;
+                let html = `<strong>${info?.itemLabel?.value || id}</strong><br>`;
+                if (info?.desc) html += `<div style="margin: 8px 0;">${info.desc.value}</div>`;
+                html += `<a href="${wikidataUrl}" target="_blank" style="color: #1a73e8;">Wikidata詳細</a>`;
+                document.getElementById('sidepanel').innerHTML = html;
+            } catch (e) {
+                document.getElementById('sidepanel').innerHTML = '取得エラー';
+            }
+        }
+
+        // --- 結果クリア ---
+        function clearResults() {
+            document.getElementById('characterList').innerHTML = '';
+            document.getElementById('performanceSummary').innerHTML = '';
+            document.getElementById('cy').innerHTML = '';
+            document.getElementById('sidepanel').innerHTML = '';
+            document.getElementById('graphTitle').innerHTML = '';
+            document.getElementById('relationshipTable').innerHTML = '';
+        }
+
+        // --- 初期化 ---
+        window.addEventListener('DOMContentLoaded', () => {
+            loadGraphHistory();
+        });
+    </script>
+</body>
+
+</html>
